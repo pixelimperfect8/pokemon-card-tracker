@@ -9,8 +9,16 @@ export async function POST(req: Request) {
   try {
     const { url } = await req.json();
     if (!url) return NextResponse.json({ error: "Missing url" }, { status: 400 });
-    const res = await fetch(url, { next: { revalidate: 0 } });
-    const html = await res.text();
+    let html: string;
+    try {
+      const res = await fetch(url, { next: { revalidate: 0 } });
+      if (!res.ok) {
+        return NextResponse.json({ error: "Failed to fetch URL" }, { status: 502 });
+      }
+      html = await res.text();
+    } catch {
+      return NextResponse.json({ error: "Failed to fetch URL" }, { status: 502 });
+    }
 
     const title = meta(html, "og:title") || (/<title>([^<]+)<\/title>/i.exec(html)?.[1] ?? "Unknown eBay Item");
     const image = meta(html, "og:image") || undefined;
