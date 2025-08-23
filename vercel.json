@@ -1,0 +1,8 @@
+{
+  "builds": [
+    { "src": "pokemon-card-tracker-github/package.json", "use": "@vercel/next" }
+  ],
+  "routes": [
+    { "src": "/(.*)", "dest": "pokemon-card-tracker-github/$1" }
+  ]
+}
