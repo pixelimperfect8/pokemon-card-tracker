@@ -18,6 +18,8 @@ export default function Page() {
   const [cards, setCards] = useState<Card[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
   useEffect(() => {
     const raw = localStorage.getItem("cards.v1.web"); 
@@ -63,11 +65,36 @@ export default function Page() {
 
   async function refreshCard(id: string) {
     const current = cards.find(c => c.id === id); if (!current) return;
-    const pr = await fetch("/api/prices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: current.name }) });
-    const prices: Prices = pr.ok ? await pr.json() : current.prices;
-    const updated: Card = { ...current, prices, lastChecked: new Date().toISOString() };
-    const next = cards.map(c => c.id === id ? updated : c);
-    setCards(next); saveAll(next);
+    setRefreshingId(id);
+    setError(null);
+    try {
+      let response: Response | null = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          response = await fetch("/api/prices", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name: current.name })
+          });
+          if (response.ok) break;
+        } catch (_) {
+          // retry on network failure
+        }
+      }
+      if (!response || !response.ok) {
+        const msg = response ? await response.text() : "Network error. Please try again.";
+        setError(msg || "Failed to refresh card.");
+        return;
+      }
+      const prices: Prices = await response.json();
+      const updated: Card = { ...current, prices, lastChecked: new Date().toISOString() };
+      const next = cards.map(c => c.id === id ? updated : c);
+      setCards(next); saveAll(next);
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setRefreshingId(null);
+    }
   }
 
   return (
@@ -82,6 +109,8 @@ export default function Page() {
           {fetching ? "Saving…" : "+ Save"}
         </button>
       </div>
+
+      {error && <div style={{ color: "red", marginTop: 8 }}>{error}</div>}
 
       {preview && (
         <div style={{ marginTop: 12, display: "flex", gap: 12, alignItems: "center" }}>
@@ -106,7 +135,9 @@ export default function Page() {
                 <span>PSA 10: ${c.prices.psa10 ?? "—"}</span>
               </div>
             </div>
-            <button onClick={() => refreshCard(c.id)} style={{ padding: "8px 12px", borderRadius: 8 }}>Refresh</button>
+            <button onClick={() => refreshCard(c.id)} disabled={refreshingId === c.id} style={{ padding: "8px 12px", borderRadius: 8 }}>
+              {refreshingId === c.id ? "Refreshing…" : "Refresh"}
+            </button>
           </li>
         ))}
       </ul>
